@@ -50,6 +50,7 @@ def main():
                 
             if classes:
                 st.sidebar.header("Available Classes")
+                # Allow multiple selections
                 selected_classes = st.sidebar.multiselect("Select Classes to Scrape:", classes)
             else:
                 st.error("No classes found at the provided URL.")
