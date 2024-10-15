@@ -1,6 +1,7 @@
 import streamlit as st
 import requests
 from bs4 import BeautifulSoup
+from urllib.parse import urljoin
 
 def fetch_html(url):
     """Fetch HTML content from the provided URL."""
@@ -21,7 +22,7 @@ def get_classes(html):
             classes.update(tag['class'])
     return list(classes)
 
-def scrape_data(html, selected_classes):
+def scrape_data(html, selected_classes, base_url):
     """Scrape data based on selected classes."""
     soup = BeautifulSoup(html, 'html.parser')
     data = {}
@@ -38,7 +39,8 @@ def scrape_data(html, selected_classes):
             # Get images from <img> tags
             for img in element.find_all('img'):
                 if 'src' in img.attrs:
-                    images.append(img['src'])
+                    img_url = urljoin(base_url, img['src'])  # Convert to absolute URL
+                    images.append(img_url)
         
         data[class_name] = {'paragraphs': paragraphs, 'images': images}
     return data
@@ -55,7 +57,7 @@ if url:
 
         if st.button("Scrape Data"):
             if selected_classes:
-                scraped_data = scrape_data(html_content, selected_classes)
+                scraped_data = scrape_data(html_content, selected_classes, url)
                 st.success("Data Scraped Successfully!")
 
                 # Displaying the scraped data
