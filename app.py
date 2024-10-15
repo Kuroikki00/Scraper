@@ -27,11 +27,20 @@ def scrape_data(html, selected_classes):
     data = {}
     for class_name in selected_classes:
         elements = soup.find_all(class_=class_name)
-        data[class_name] = [element.get_text(strip=True) for element in elements]
-        # Scraping images if any
-        images = [img['src'] for img in soup.find_all('img', class_=class_name)]
-        if images:
-            data[class_name].append({'images': images})
+        paragraphs = []
+        images = []
+        
+        for element in elements:
+            # Get text from <p> tags
+            for p in element.find_all('p'):
+                paragraphs.append(p.get_text(strip=True))
+            
+            # Get images from <img> tags
+            for img in element.find_all('img'):
+                if 'src' in img.attrs:
+                    images.append(img['src'])
+        
+        data[class_name] = {'paragraphs': paragraphs, 'images': images}
     return data
 
 # Streamlit app
@@ -52,11 +61,15 @@ if url:
                 # Displaying the scraped data
                 for class_name, contents in scraped_data.items():
                     st.subheader(class_name)
-                    for content in contents:
-                        if isinstance(content, dict):  # Check for images
-                            for img in content['images']:
-                                st.image(img)
-                        else:
-                            st.write(content)
+                    
+                    # Display paragraphs
+                    if contents['paragraphs']:
+                        for paragraph in contents['paragraphs']:
+                            st.write(paragraph)
+                    
+                    # Display images
+                    if contents['images']:
+                        for img in contents['images']:
+                            st.image(img, use_column_width=True)  # Display images with responsive width
             else:
                 st.warning("Please select at least one class to scrape.")
