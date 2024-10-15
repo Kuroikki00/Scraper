@@ -13,22 +13,24 @@ def scrape_novel(url):
 
     soup = BeautifulSoup(response.content, 'html.parser')
 
-    # Menampilkan semua elemen HTML untuk pemilihan
+    # Mengambil semua elemen HTML untuk pemilihan
     all_elements = soup.find_all(True)  # Ambil semua tag HTML
     return soup, all_elements
 
-def extract_selected_elements(soup, selected_tags):
-    extracted_text = {}
+def extract_selected_elements(soup, selected_elements):
+    extracted_content = {}
     image_urls = []
-    
-    for tag in selected_tags:
-        elements = soup.find_all(tag)
-        extracted_text[tag] = "\n\n".join([element.get_text() for element in elements])
-        # Menyimpan URL gambar dari tag <img> dalam elemen yang dipilih
-        if tag == 'img':
-            image_urls.extend([img['src'] for img in elements if 'src' in img.attrs])
-    
-    return extracted_text, image_urls
+
+    for element in selected_elements:
+        element_tag = element.name
+        element_content = element.get_text(strip=True)
+
+        # Menyimpan teks dan URL gambar dari tag <img>
+        extracted_content[element_tag] = element_content
+        if element_tag == 'img' and 'src' in element.attrs:
+            image_urls.append(element['src'])
+
+    return extracted_content, image_urls
 
 def save_images(image_urls):
     saved_image_paths = []
@@ -50,13 +52,20 @@ if st.button("Ambil Elemen"):
     if url:
         soup, all_elements = scrape_novel(url)
         if soup:
-            # Menampilkan pilihan tag HTML
+            # Menampilkan semua elemen untuk pemilihan
             st.header("Pilih Elemen untuk Di-scrape:")
-            selected_tags = st.multiselect("Pilih tag HTML:", [element.name for element in all_elements])
+            selected_elements = []
+            for element in all_elements:
+                if element.name not in ['script', 'style']:  # Menghindari elemen yang tidak relevan
+                    content = element.get_text(strip=True)
+                    st.checkbox(f"{element.name}: {content[:50]}...", key=element, value=False)  # Menampilkan 50 karakter pertama
+                    selected_elements.append(element)
 
             if st.button("Scrape Selected Elements"):
-                if selected_tags:
-                    extracted_content, image_urls = extract_selected_elements(soup, selected_tags)
+                selected_keys = [element for element in selected_elements if st.checkbox(f"{element.name}: {element.get_text(strip=True)[:50]}...", value=False)]
+                
+                if selected_keys:
+                    extracted_content, image_urls = extract_selected_elements(soup, selected_keys)
 
                     # Menyimpan dan menampilkan konten yang diekstrak
                     for tag, content in extracted_content.items():
@@ -70,7 +79,7 @@ if st.button("Ambil Elemen"):
                         for img_path in saved_images:
                             st.image(img_path, caption=os.path.basename(img_path))
                 else:
-                    st.error("Silakan pilih tag untuk di-scrape.")
+                    st.error("Silakan pilih elemen untuk di-scrape.")
         else:
             st.error("Tidak ada konten yang ditemukan.")
     else:
