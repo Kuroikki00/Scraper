@@ -2,86 +2,61 @@ import streamlit as st
 import requests
 from bs4 import BeautifulSoup
 
-def get_classes_from_url(url):
-    """Get all unique class names from the specified URL."""
-    response = requests.get(url)
-    soup = BeautifulSoup(response.text, 'html.parser')
-    
+def fetch_html(url):
+    """Fetch HTML content from the provided URL."""
+    try:
+        response = requests.get(url)
+        response.raise_for_status()  # Raise an error for bad responses
+        return response.text
+    except requests.RequestException as e:
+        st.error(f"Error fetching data: {e}")
+        return None
+
+def get_classes(html):
+    """Extract all unique class names from the HTML."""
+    soup = BeautifulSoup(html, 'html.parser')
     classes = set()
-    for class_ in soup.find_all(class_=True):
-        classes.update(class_.get('class'))
-    
-    return sorted(classes)
+    for tag in soup.find_all(True):  # Find all tags
+        if 'class' in tag.attrs:
+            classes.update(tag['class'])
+    return list(classes)
 
-def scrape_novel_data(url, class_names):
-    """Scrape text and images from a given URL based on the selected class names."""
-    response = requests.get(url)
-    soup = BeautifulSoup(response.text, 'html.parser')
-    
-    extracted_text = []
-    images = []
-    
-    for class_name in class_names:
-        content = soup.find_all(class_=class_name)
-        
-        for item in content:
-            # Collect text
-            extracted_text.append(item.get_text(strip=True))
-            
-            # Collect images
-            for img in item.find_all('img'):
-                images.append(img['src'])
-    
-    return extracted_text, images
+def scrape_data(html, selected_classes):
+    """Scrape data based on selected classes."""
+    soup = BeautifulSoup(html, 'html.parser')
+    data = {}
+    for class_name in selected_classes:
+        elements = soup.find_all(class_=class_name)
+        data[class_name] = [element.get_text(strip=True) for element in elements]
+        # Scraping images if any
+        images = [img['src'] for img in soup.find_all('img', class_=class_name)]
+        if images:
+            data[class_name].append({'images': images})
+    return data
 
-def main():
-    st.title("Novel Scraper")
-    
-    st.sidebar.header("Input Options")
-    
-    # Input URL
-    url = st.sidebar.text_input("Enter URL to Scrape:")
-    
-    if 'classes' not in st.session_state:
-        st.session_state.classes = []
-    
-    if url:
-        # Button to fetch classes
-        if st.sidebar.button("Fetch Classes"):
-            with st.spinner("Fetching classes..."):
-                classes = get_classes_from_url(url)
-                st.session_state.classes = classes  # Store classes in session state
-                
-            if classes:
-                st.sidebar.header("Available Classes")
-                # Allow multiple selections
-                selected_classes = st.sidebar.multiselect("Select Classes to Scrape:", st.session_state.classes)
-                st.session_state.selected_classes = selected_classes  # Store selected classes in session state
+# Streamlit app
+st.title("Novel Scraper")
+
+url = st.text_input("Enter the URL of the novel page:")
+if url:
+    html_content = fetch_html(url)
+    if html_content:
+        classes = get_classes(html_content)
+        selected_classes = st.multiselect("Select classes to scrape:", classes)
+
+        if st.button("Scrape Data"):
+            if selected_classes:
+                scraped_data = scrape_data(html_content, selected_classes)
+                st.success("Data Scraped Successfully!")
+
+                # Displaying the scraped data
+                for class_name, contents in scraped_data.items():
+                    st.subheader(class_name)
+                    for content in contents:
+                        if isinstance(content, dict):  # Check for images
+                            for img in content['images']:
+                                st.image(img)
+                        else:
+                            st.write(content)
             else:
-                st.error("No classes found at the provided URL.")
-        else:
-            selected_classes = st.session_state.get('selected_classes', [])
-    else:
-        selected_classes = st.session_state.get('selected_classes', [])
-
-    # Check if classes are selected
-    if selected_classes:
-        # Unique Scrape button
-        if st.sidebar.button("Scrape Now"):
-            with st.spinner("Scraping..."):
-                text_data, image_data = scrape_novel_data(url, selected_classes)
-                
-            # Displaying the results
-            st.header("Scraped Data")
-            st.subheader("Text Content:")
-            for text in text_data:
-                st.write(text)
-                
-            st.subheader("Images:")
-            for img_url in image_data:
-                st.image(img_url)
-    elif st.sidebar.button("Scrape Now"):
-        st.error("Please select at least one class to scrape.")
-
-if __name__ == "__main__":
-    main()
+                st.warning("Please select at least one class to scrape.")
