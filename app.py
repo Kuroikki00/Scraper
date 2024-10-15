@@ -1,86 +1,52 @@
 import streamlit as st
-from bs4 import BeautifulSoup
 import requests
-import streamlit.components.v1 as components
+from bs4 import BeautifulSoup
+import pandas as pd
 
-# Fungsi untuk menyorot elemen di tampilan web
-def highlight_element(element_id):
-    script = f"""
-    <script>
-    function highlightElement() {{
-        const el = document.querySelector('[data-id="{element_id}"]');
-        if (el) {{
-            el.style.backgroundColor = 'yellow';
-            el.scrollIntoView({{behavior: 'smooth', block: 'center'}});
-        }}
-    }}
-    highlightElement();
-    </script>
-    """
-    return script
-
-# Fungsi untuk menambahkan data-id ke setiap elemen untuk tracking
-def add_data_id(soup):
-    for idx, tag in enumerate(soup.find_all(True)):
-        tag['data-id'] = idx
-    return soup
-
-# Fungsi untuk menampilkan HTML di Streamlit
-def render_html(html_content):
-    components.html(html_content, height=600, scrolling=True)
-
-# Fungsi untuk mendapatkan elemen berdasarkan class atau id
-def get_elements_by_tag(soup, tags):
-    elements = []
-    for tag in soup.find_all(tags):
-        identifier = tag.get('id') or tag.get('class')
-        tag_repr = f"{tag.name}"
-        if identifier:
-            tag_repr += f" ({identifier})"
-        elements.append((tag_repr, tag))
-    return elements
-
-# Fungsi untuk menampilkan elemen dengan hierarki
-def display_element_tree(soup, parent_element=None, level=0):
-    elements = soup.find_all(recursive=False) if parent_element is None else parent_element.find_all(recursive=False)
-    for idx, element in enumerate(elements):
-        identifier = element.get('id') or element.get('class')
-        element_id = element.get('data-id')
-        if identifier:
-            name = f"{' ' * level * 2} - {element.name} ({identifier})"
-        else:
-            name = f"{' ' * level * 2} - {element.name}"
-        
-        if st.button(name):
-            script = highlight_element(element_id)
-            render_html(str(soup) + script)
-
-        # Recursive call to display children
-        display_element_tree(element, element, level + 1)
-
-# Layout utama
-st.title("Web Scraping Developer Tools")
-url = st.text_input("Masukkan URL halaman web yang ingin Anda scraping:")
-
-if url:
+# Fungsi untuk melakukan scraping
+def scrape_novel(url, title_selector, image_selector, text_selector):
     try:
-        # Ambil konten HTML
         response = requests.get(url)
-        soup = BeautifulSoup(response.content, "html.parser")
+        response.raise_for_status()  # Memeriksa apakah permintaan berhasil
+        soup = BeautifulSoup(response.content, 'html.parser')
 
-        # Tambahkan data-id ke setiap elemen untuk tracking
-        soup = add_data_id(soup)
+        # Mengambil elemen berdasarkan selector yang diberikan
+        titles = soup.select(title_selector)
+        images = soup.select(image_selector)
+        texts = soup.select(text_selector)
 
-        # Tampilan kolom kiri dan kanan
-        col1, col2 = st.columns(2)
+        # Menyiapkan data untuk disimpan
+        data = []
+        for title, image, text in zip(titles, images, texts):
+            data.append({
+                'Title': title.get_text(strip=True),
+                'Image URL': image['src'] if 'src' in image.attrs else None,
+                'Text': text.get_text(strip=True)
+            })
 
-        with col1:
-            st.subheader("Website View")
-            render_html(str(soup))
-
-        with col2:
-            st.subheader("HTML Element Hierarchy")
-            display_element_tree(soup)
-
+        return pd.DataFrame(data)
     except requests.exceptions.RequestException as e:
-        st.error(f"Gagal memuat halaman: {e}")
+        st.error(f"Kesalahan saat mengakses URL: {e}")
+        return pd.DataFrame()  # Mengembalikan DataFrame kosong
+    except Exception as e:
+        st.error(f"Terjadi kesalahan: {e}")
+        return pd.DataFrame()  # Mengembalikan DataFrame kosong
+
+# Streamlit UI
+st.title("Novel Scraper")
+url = st.text_input("Masukkan URL novel:")
+title_selector = st.text_input("CSS Selector untuk Judul (contoh: h1.title):")
+image_selector = st.text_input("CSS Selector untuk Gambar (contoh: img.cover):")
+text_selector = st.text_input("CSS Selector untuk Teks (contoh: div.chapter):")
+
+if st.button("Scrape"):
+    if url and title_selector and image_selector and text_selector:
+        df = scrape_novel(url, title_selector, image_selector, text_selector)
+        if not df.empty:
+            st.success("Scraping selesai!")
+            st.dataframe(df)
+            for index, row in df.iterrows():
+                st.image(row['Image URL'], caption=row['Title'], use_column_width=True)
+                st.write(row['Text'])
+    else:
+        st.error("Silakan isi semua field yang diperlukan.")
