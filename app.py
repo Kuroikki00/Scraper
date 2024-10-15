@@ -36,6 +36,7 @@ def save_images(image_urls):
         img_response = requests.get(url)
         if img_response.status_code == 200:
             img = Image.open(BytesIO(img_response.content))
+            # Menyimpan gambar dengan nama yang mencerminkan urutan
             image_path = f"image_{i + 1}.png"
             img.save(image_path)
             saved_image_paths.append(image_path)
