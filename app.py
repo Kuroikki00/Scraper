@@ -39,9 +39,11 @@ def main():
     
     st.sidebar.header("Input Options")
     
+    # Input URL
     url = st.sidebar.text_input("Enter URL to Scrape:")
     
     if url:
+        # Button to fetch classes
         if st.sidebar.button("Fetch Classes"):
             with st.spinner("Fetching classes..."):
                 classes = get_classes_from_url(url)
@@ -56,20 +58,22 @@ def main():
     else:
         selected_classes = []
     
-    # Use a unique identifier for the Scrape button
-    if st.sidebar.button("Scrape Now") and selected_classes:
-        with st.spinner("Scraping..."):
-            text_data, image_data = scrape_novel_data(url, selected_classes)
-            
-        # Displaying the results
-        st.header("Scraped Data")
-        st.subheader("Text Content:")
-        for text in text_data:
-            st.write(text)
-            
-        st.subheader("Images:")
-        for img_url in image_data:
-            st.image(img_url)
+    # Check if classes are selected
+    if selected_classes:
+        # Unique Scrape button
+        if st.sidebar.button("Scrape Now"):
+            with st.spinner("Scraping..."):
+                text_data, image_data = scrape_novel_data(url, selected_classes)
+                
+            # Displaying the results
+            st.header("Scraped Data")
+            st.subheader("Text Content:")
+            for text in text_data:
+                st.write(text)
+                
+            st.subheader("Images:")
+            for img_url in image_data:
+                st.image(img_url)
     elif st.sidebar.button("Scrape Now"):
         st.error("Please select at least one class to scrape.")
 
