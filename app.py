@@ -42,23 +42,28 @@ def main():
     # Input URL
     url = st.sidebar.text_input("Enter URL to Scrape:")
     
+    if 'classes' not in st.session_state:
+        st.session_state.classes = []
+    
     if url:
         # Button to fetch classes
         if st.sidebar.button("Fetch Classes"):
             with st.spinner("Fetching classes..."):
                 classes = get_classes_from_url(url)
+                st.session_state.classes = classes  # Store classes in session state
                 
             if classes:
                 st.sidebar.header("Available Classes")
                 # Allow multiple selections
-                selected_classes = st.sidebar.multiselect("Select Classes to Scrape:", classes)
+                selected_classes = st.sidebar.multiselect("Select Classes to Scrape:", st.session_state.classes)
+                st.session_state.selected_classes = selected_classes  # Store selected classes in session state
             else:
                 st.error("No classes found at the provided URL.")
         else:
-            selected_classes = []
+            selected_classes = st.session_state.get('selected_classes', [])
     else:
-        selected_classes = []
-    
+        selected_classes = st.session_state.get('selected_classes', [])
+
     # Check if classes are selected
     if selected_classes:
         # Unique Scrape button
