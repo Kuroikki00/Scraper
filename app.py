@@ -1,77 +1,76 @@
 import streamlit as st
 import requests
 from bs4 import BeautifulSoup
-from urllib.parse import urljoin
+from PIL import Image
+from io import BytesIO
+import os
 
-def fetch_html(url):
-    """Fetch HTML content from the provided URL."""
-    try:
-        response = requests.get(url)
-        response.raise_for_status()  # Raise an error for bad responses
-        return response.text
-    except requests.RequestException as e:
-        st.error(f"Error fetching data: {e}")
+def scrape_novel(url):
+    response = requests.get(url)
+    if response.status_code != 200:
+        st.error("Error fetching the URL")
         return None
 
-def get_classes(html):
-    """Extract all unique class names from the HTML."""
-    soup = BeautifulSoup(html, 'html.parser')
-    classes = set()
-    for tag in soup.find_all(True):  # Find all tags
-        if 'class' in tag.attrs:
-            classes.update(tag['class'])
-    return list(classes)
+    soup = BeautifulSoup(response.content, 'html.parser')
 
-def scrape_data(html, selected_classes, base_url):
-    """Scrape data based on selected classes."""
-    soup = BeautifulSoup(html, 'html.parser')
-    data = {}
-    for class_name in selected_classes:
-        elements = soup.find_all(class_=class_name)
-        paragraphs = []
-        images = []
-        
-        for element in elements:
-            # Get text from <p> tags
-            for p in element.find_all('p'):
-                paragraphs.append(p.get_text(strip=True))
-            
-            # Get images from <img> tags
-            for img in element.find_all('img'):
-                if 'src' in img.attrs:
-                    img_url = urljoin(base_url, img['src'])  # Convert to absolute URL
-                    images.append(img_url)
-        
-        data[class_name] = {'paragraphs': paragraphs, 'images': images}
-    return data
+    # Menampilkan semua elemen HTML untuk pemilihan
+    all_elements = soup.find_all(True)  # Ambil semua tag HTML
+    return soup, all_elements
 
-# Streamlit app
+def extract_selected_elements(soup, selected_tags):
+    extracted_text = {}
+    image_urls = []
+    
+    for tag in selected_tags:
+        elements = soup.find_all(tag)
+        extracted_text[tag] = "\n\n".join([element.get_text() for element in elements])
+        # Menyimpan URL gambar dari tag <img> dalam elemen yang dipilih
+        if tag == 'img':
+            image_urls.extend([img['src'] for img in elements if 'src' in img.attrs])
+    
+    return extracted_text, image_urls
+
+def save_images(image_urls):
+    saved_image_paths = []
+    for i, url in enumerate(image_urls):
+        img_response = requests.get(url)
+        if img_response.status_code == 200:
+            img = Image.open(BytesIO(img_response.content))
+            image_path = f"image_{i + 1}.png"
+            img.save(image_path)
+            saved_image_paths.append(image_path)
+    return saved_image_paths
+
 st.title("Novel Scraper")
 
-url = st.text_input("Enter the URL of the novel page:")
-if url:
-    html_content = fetch_html(url)
-    if html_content:
-        classes = get_classes(html_content)
-        selected_classes = st.multiselect("Select classes to scrape:", classes)
+url = st.text_input("Masukkan URL novel:")
 
-        if st.button("Scrape Data"):
-            if selected_classes:
-                scraped_data = scrape_data(html_content, selected_classes, url)
-                st.success("Data Scraped Successfully!")
+if st.button("Ambil Elemen"):
+    if url:
+        soup, all_elements = scrape_novel(url)
+        if soup:
+            # Menampilkan pilihan tag HTML
+            st.header("Pilih Elemen untuk Di-scrape:")
+            selected_tags = st.multiselect("Pilih tag HTML:", [element.name for element in all_elements])
 
-                # Displaying the scraped data
-                for class_name, contents in scraped_data.items():
-                    st.subheader(class_name)
-                    
-                    # Display paragraphs
-                    if contents['paragraphs']:
-                        for paragraph in contents['paragraphs']:
-                            st.write(paragraph)
-                    
-                    # Display images
-                    if contents['images']:
-                        for img in contents['images']:
-                            st.image(img, use_column_width=True)  # Display images with responsive width
-            else:
-                st.warning("Please select at least one class to scrape.")
+            if st.button("Scrape Selected Elements"):
+                if selected_tags:
+                    extracted_content, image_urls = extract_selected_elements(soup, selected_tags)
+
+                    # Menyimpan dan menampilkan konten yang diekstrak
+                    for tag, content in extracted_content.items():
+                        st.subheader(tag)
+                        st.text_area(f"Konten dari <{tag}>", content, height=150)
+
+                    # Mengunduh dan menampilkan gambar
+                    if image_urls:
+                        saved_images = save_images(image_urls)
+                        st.header("Gambar:")
+                        for img_path in saved_images:
+                            st.image(img_path, caption=os.path.basename(img_path))
+                else:
+                    st.error("Silakan pilih tag untuk di-scrape.")
+        else:
+            st.error("Tidak ada konten yang ditemukan.")
+    else:
+        st.error("URL tidak boleh kosong.")
