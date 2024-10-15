@@ -1,52 +1,76 @@
 import streamlit as st
 import requests
 from bs4 import BeautifulSoup
-import pandas as pd
 
-# Fungsi untuk melakukan scraping
-def scrape_novel(url, title_selector, image_selector, text_selector):
-    try:
-        response = requests.get(url)
-        response.raise_for_status()  # Memeriksa apakah permintaan berhasil
-        soup = BeautifulSoup(response.content, 'html.parser')
+def get_classes_from_url(url):
+    """Get all unique class names from the specified URL."""
+    response = requests.get(url)
+    soup = BeautifulSoup(response.text, 'html.parser')
+    
+    classes = set()
+    for class_ in soup.find_all(class_=True):
+        classes.update(class_.get('class'))
+    
+    return sorted(classes)
 
-        # Mengambil elemen berdasarkan selector yang diberikan
-        titles = soup.select(title_selector)
-        images = soup.select(image_selector)
-        texts = soup.select(text_selector)
+def scrape_novel_data(url, class_names):
+    """Scrape text and images from a given URL based on the selected class names."""
+    response = requests.get(url)
+    soup = BeautifulSoup(response.text, 'html.parser')
+    
+    extracted_text = []
+    images = []
+    
+    for class_name in class_names:
+        content = soup.find_all(class_=class_name)
+        
+        for item in content:
+            # Collect text
+            extracted_text.append(item.get_text(strip=True))
+            
+            # Collect images
+            for img in item.find_all('img'):
+                images.append(img['src'])
+    
+    return extracted_text, images
 
-        # Menyiapkan data untuk disimpan
-        data = []
-        for title, image, text in zip(titles, images, texts):
-            data.append({
-                'Title': title.get_text(strip=True),
-                'Image URL': image['src'] if 'src' in image.attrs else None,
-                'Text': text.get_text(strip=True)
-            })
-
-        return pd.DataFrame(data)
-    except requests.exceptions.RequestException as e:
-        st.error(f"Kesalahan saat mengakses URL: {e}")
-        return pd.DataFrame()  # Mengembalikan DataFrame kosong
-    except Exception as e:
-        st.error(f"Terjadi kesalahan: {e}")
-        return pd.DataFrame()  # Mengembalikan DataFrame kosong
-
-# Streamlit UI
-st.title("Novel Scraper")
-url = st.text_input("Masukkan URL novel:")
-title_selector = st.text_input("CSS Selector untuk Judul (contoh: h1.title):")
-image_selector = st.text_input("CSS Selector untuk Gambar (contoh: img.cover):")
-text_selector = st.text_input("CSS Selector untuk Teks (contoh: div.chapter):")
-
-if st.button("Scrape"):
-    if url and title_selector and image_selector and text_selector:
-        df = scrape_novel(url, title_selector, image_selector, text_selector)
-        if not df.empty:
-            st.success("Scraping selesai!")
-            st.dataframe(df)
-            for index, row in df.iterrows():
-                st.image(row['Image URL'], caption=row['Title'], use_column_width=True)
-                st.write(row['Text'])
+def main():
+    st.title("Novel Scraper")
+    
+    st.sidebar.header("Input Options")
+    
+    url = st.sidebar.text_input("Enter URL to Scrape:")
+    
+    if url:
+        if st.sidebar.button("Fetch Classes"):
+            with st.spinner("Fetching classes..."):
+                classes = get_classes_from_url(url)
+                
+            if classes:
+                st.sidebar.header("Available Classes")
+                selected_classes = st.sidebar.multiselect("Select Classes to Scrape:", classes)
+            else:
+                st.error("No classes found at the provided URL.")
+        else:
+            selected_classes = []
     else:
-        st.error("Silakan isi semua field yang diperlukan.")
+        selected_classes = []
+    
+    if st.sidebar.button("Scrape") and selected_classes:
+        with st.spinner("Scraping..."):
+            text_data, image_data = scrape_novel_data(url, selected_classes)
+            
+        # Displaying the results
+        st.header("Scraped Data")
+        st.subheader("Text Content:")
+        for text in text_data:
+            st.write(text)
+            
+        st.subheader("Images:")
+        for img_url in image_data:
+            st.image(img_url)
+    elif st.sidebar.button("Scrape"):
+        st.error("Please select at least one class to scrape.")
+
+if __name__ == "__main__":
+    main()
