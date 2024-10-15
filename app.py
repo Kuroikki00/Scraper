@@ -1,81 +1,61 @@
 import streamlit as st
-import requests
 from bs4 import BeautifulSoup
-from urllib.parse import urljoin
+import requests
+import streamlit.components.v1 as components
 
-# Fungsi untuk mengambil HTML dari URL
-def fetch_html(url):
-    try:
-        response = requests.get(url)
-        if response.status_code == 200:
-            return response.text
-        else:
-            st.error("Failed to fetch the URL. Please check the URL and try again.")
-    except Exception as e:
-        st.error(f"An error occurred: {e}")
+# Fungsi untuk menyorot elemen di web tampilan
+def highlight_element(soup, element_id):
+    script = f"""
+    <script>
+    function highlightElement() {{
+        const el = document.querySelector('[data-id="{element_id}"]');
+        if (el) {{
+            el.style.backgroundColor = 'yellow';
+            el.scrollIntoView({{behavior: 'smooth', block: 'center'}});
+        }}
+    }}
+    highlightElement();
+    </script>
+    """
+    return script
 
-# Fungsi untuk mem-parsing HTML
-def parse_html(html):
-    soup = BeautifulSoup(html, "html.parser")
+# Fungsi untuk membuat elemen HTML dengan data-id khusus untuk di-highlight
+def add_data_id(soup):
+    for idx, tag in enumerate(soup.find_all(True)):
+        tag['data-id'] = idx
     return soup
 
-# Fungsi untuk mengekstrak semua tag yang ada di halaman
-def extract_tags(soup):
-    tags = {tag.name for tag in soup.find_all()}
-    return sorted(tags)
+# Fungsi untuk menampilkan HTML di streamlit
+def render_html(html_content):
+    components.html(html_content, height=600, scrolling=True)
 
-# Fungsi untuk menampilkan elemen berdasarkan tag yang dipilih
-def extract_elements_by_tags(soup, tag_names):
-    elements = []
-    for tag_name in tag_names:
-        elements.extend(soup.find_all(tag_name))
-    return elements
-
-# Menggabungkan URL dasar dengan src gambar
-def get_full_image_url(base_url, src):
-    return urljoin(base_url, src)
-
-# Fungsi untuk menampilkan teks dan gambar
-def display_text_and_images(elements, base_url):
-    for element in elements:
-        if element.name == "img" and element.get("src"):
-            img_url = get_full_image_url(base_url, element.get("src"))
-            st.image(img_url, caption=img_url)
-        elif element.text.strip():
-            st.write(element.text.strip())
-
-# Fungsi untuk menambahkan highlight ke elemen yang dipilih
-def highlight_elements(soup, tag_names):
-    for tag in soup.find_all(tag_names):
-        tag['style'] = "border: 2px solid red; background-color: #ffeb3b;"  # Tambah highlight dengan warna kuning
-    return str(soup)
-
-# Streamlit UI
-st.title("Schema Markup Validator & Web Scraper with Highlight")
-
-# Input URL
-url = st.text_input("Enter the URL to scrape:", "https://example.com")
+# Layout utama
+st.title("Web Scraping Developer Tools")
+url = st.text_input("Masukkan URL halaman web yang ingin Anda scraping:")
 
 if url:
-    # Fetch and parse HTML
-    html = fetch_html(url)
-    if html:
-        soup = parse_html(html)
+    try:
+        # Ambil konten HTML
+        response = requests.get(url)
+        soup = BeautifulSoup(response.content, "html.parser")
 
-        # Extract and display tags for selection
-        tags = extract_tags(soup)
-        selected_tags = st.multiselect("Select tags to highlight:", tags)
+        # Tambahkan data-id ke setiap elemen untuk tracking
+        soup = add_data_id(soup)
 
-        if selected_tags:
-            # Highlight the selected elements
-            highlighted_html = highlight_elements(soup, selected_tags)
+        # Tampilan kolom kiri dan kanan
+        col1, col2 = st.columns(2)
 
-            # Display highlighted HTML
-            st.write("**Webpage Preview with Highlighted Elements:**")
-            st.components.v1.html(highlighted_html, height=600, scrolling=True)
+        with col1:
+            st.subheader("Website View")
+            render_html(str(soup))
 
-            # Display extracted elements' content
-            st.write("**Content of Selected Tags:**")
-            elements = extract_elements_by_tags(soup, selected_tags)
-            st.write(f"Found {len(elements)} elements with selected tags.")
-            display_text_and_images(elements, url)
+        with col2:
+            st.subheader("HTML Elements")
+            for idx, tag in enumerate(soup.find_all(True)):
+                if st.button(f"{idx}: {tag.name}"):
+                    # Ketika elemen diklik, buat script highlight
+                    script = highlight_element(soup, idx)
+                    render_html(str(soup) + script)
+
+    except requests.exceptions.RequestException as e:
+        st.error(f"Gagal memuat halaman: {e}")
