@@ -56,7 +56,8 @@ def main():
     else:
         selected_classes = []
     
-    if st.sidebar.button("Scrape") and selected_classes:
+    # Use a unique identifier for the Scrape button
+    if st.sidebar.button("Scrape Now") and selected_classes:
         with st.spinner("Scraping..."):
             text_data, image_data = scrape_novel_data(url, selected_classes)
             
@@ -69,7 +70,7 @@ def main():
         st.subheader("Images:")
         for img_url in image_data:
             st.image(img_url)
-    elif st.sidebar.button("Scrape"):
+    elif st.sidebar.button("Scrape Now"):
         st.error("Please select at least one class to scrape.")
 
 if __name__ == "__main__":
